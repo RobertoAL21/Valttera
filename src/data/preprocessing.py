@@ -1,0 +1,154 @@
+"""Raw-data validation and deterministic cleaning for Ames housing data.
+
+Learned transformations such as median imputation and one-hot encoding do not
+belong here.  They are fitted on training data only in the modelling pipeline.
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+from pathlib import Path
+
+import pandas as pd
+
+
+TARGET_COLUMN = "SalePrice"
+IDENTIFIER_COLUMN = "Id"
+HIGH_CARDINALITY_THRESHOLD = 50
+
+
+@dataclass(frozen=True)
+class DataValidationReport:
+    """Summary of data-quality checks that do not change the source data."""
+
+    rows: int
+    columns: int
+    duplicate_rows: int
+    missing_values: dict[str, int]
+    constant_columns: list[str]
+    high_cardinality_categoricals: dict[str, int]
+    negative_numeric_values: dict[str, int]
+    impossible_values: dict[str, int]
+    iqr_outliers: dict[str, int]
+
+    def as_dict(self) -> dict[str, object]:
+        """Return a serializable representation for a report or log."""
+        return asdict(self)
+
+
+def load_raw_data(path: str | Path) -> pd.DataFrame:
+    """Read a raw CSV without altering it."""
+    return pd.read_csv(path)
+
+
+def load_processed_data(path: str | Path) -> pd.DataFrame:
+    """Read processed data while preserving categorical dwelling-class codes."""
+    return pd.read_csv(path, dtype={"MSSubClass": "string"})
+
+
+def validate_housing_data(
+    data: pd.DataFrame,
+    target_column: str = TARGET_COLUMN,
+    high_cardinality_threshold: int = HIGH_CARDINALITY_THRESHOLD,
+) -> DataValidationReport:
+    """Inspect common quality risks in the Ames training data.
+
+    The function reports observations; it deliberately does not remove
+    potential outliers because their legitimacy needs domain and EDA review.
+    """
+    if target_column not in data.columns:
+        raise ValueError(f"Required target column '{target_column}' is missing.")
+
+    missing_values = (
+        data.isna().sum().loc[lambda values: values > 0].sort_values(ascending=False).to_dict()
+    )
+    constant_columns = data.nunique(dropna=False).loc[lambda values: values <= 1].index.tolist()
+
+    categorical = data.select_dtypes(exclude="number")
+    high_cardinality = (
+        categorical.nunique(dropna=True)
+        .loc[lambda values: values > high_cardinality_threshold]
+        .sort_values(ascending=False)
+        .to_dict()
+    )
+
+    numeric = data.select_dtypes(include="number")
+    negative_values = (
+        (numeric < 0).sum().loc[lambda values: values > 0].sort_values(ascending=False).to_dict()
+    )
+    impossible_values = _find_impossible_values(data, target_column)
+    iqr_outliers = _count_iqr_outliers(numeric.drop(columns=[target_column], errors="ignore"))
+
+    return DataValidationReport(
+        rows=len(data),
+        columns=len(data.columns),
+        duplicate_rows=int(data.duplicated().sum()),
+        missing_values={column: int(count) for column, count in missing_values.items()},
+        constant_columns=constant_columns,
+        high_cardinality_categoricals={column: int(count) for column, count in high_cardinality.items()},
+        negative_numeric_values={column: int(count) for column, count in negative_values.items()},
+        impossible_values=impossible_values,
+        iqr_outliers=iqr_outliers,
+    )
+
+
+def clean_housing_data(data: pd.DataFrame, target_column: str = TARGET_COLUMN) -> pd.DataFrame:
+    """Apply only deterministic, non-learned cleaning steps.
+
+    Exact duplicate records are removed, the identifier is excluded from model
+    features, and ``MSSubClass`` is represented as categorical data because its
+    values encode dwelling classes rather than numeric magnitude. Missing values
+    are intentionally retained for the train-fitted preprocessing pipeline.
+    """
+    if target_column not in data.columns:
+        raise ValueError(f"Required target column '{target_column}' is missing.")
+
+    cleaned = data.drop_duplicates().copy()
+    cleaned = cleaned.drop(columns=[IDENTIFIER_COLUMN], errors="ignore")
+
+    if "MSSubClass" in cleaned.columns:
+        cleaned["MSSubClass"] = cleaned["MSSubClass"].astype("Int64").astype("string")
+
+    return cleaned
+
+
+def save_processed_data(data: pd.DataFrame, path: str | Path) -> Path:
+    """Write cleaned data to the processed layer, never to the raw layer."""
+    destination = Path(path)
+    if "raw" in destination.parts:
+        raise ValueError("Processed data must not be written under a raw-data path.")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    data.to_csv(destination, index=False)
+    return destination
+
+
+def _find_impossible_values(data: pd.DataFrame, target_column: str) -> dict[str, int]:
+    """Check dataset constraints whose violations are unambiguously invalid."""
+    checks: dict[str, pd.Series] = {
+        target_column: data[target_column].le(0),
+    }
+    if "MoSold" in data:
+        checks["MoSold"] = ~data["MoSold"].between(1, 12)
+    for column in ("OverallQual", "OverallCond"):
+        if column in data:
+            checks[column] = ~data[column].between(1, 10)
+    if {"YearBuilt", "YearRemodAdd"}.issubset(data.columns):
+        checks["YearRemodAdd_before_YearBuilt"] = data["YearRemodAdd"] < data["YearBuilt"]
+
+    return {name: int(mask.fillna(False).sum()) for name, mask in checks.items() if mask.fillna(False).any()}
+
+
+def _count_iqr_outliers(numeric_data: pd.DataFrame) -> dict[str, int]:
+    """Flag observations beyond 1.5 IQR for investigation, not deletion."""
+    outlier_counts: dict[str, int] = {}
+    for column in numeric_data.columns:
+        series = numeric_data[column].dropna()
+        first_quartile, third_quartile = series.quantile([0.25, 0.75])
+        interquartile_range = third_quartile - first_quartile
+        if interquartile_range == 0:
+            continue
+        count = ((series < first_quartile - 1.5 * interquartile_range) | (series > third_quartile + 1.5 * interquartile_range)).sum()
+        if count:
+            outlier_counts[column] = int(count)
+    return outlier_counts
