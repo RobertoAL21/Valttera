@@ -10,6 +10,12 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
+
+from src.features.engineering import add_engineered_features
 
 
 TARGET_COLUMN = "SalePrice"
@@ -123,6 +129,50 @@ def save_processed_data(data: pd.DataFrame, path: str | Path) -> Path:
     return destination
 
 
+def build_preprocessing_pipeline(features: pd.DataFrame) -> Pipeline:
+    """Create an unfitted pipeline for raw Ames property features.
+
+    ``features`` supplies only the input schema. Fitted statistics, including
+    numerical medians, category levels, and scaling parameters, are learned
+    later when this pipeline is fitted on ``X_train`` only.
+    """
+    _require_feature_columns(features)
+    feature_sample = add_engineered_features(features.iloc[:0].copy())
+    numerical_columns = feature_sample.select_dtypes(include="number").columns.tolist()
+    categorical_columns = feature_sample.select_dtypes(exclude="number").columns.tolist()
+
+    numerical_pipeline = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="median")),
+            ("scaler", StandardScaler()),
+        ]
+    )
+    categorical_pipeline = Pipeline(
+        steps=[
+            ("imputer", SimpleImputer(strategy="constant", fill_value="Missing")),
+            ("encoder", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+        ]
+    )
+    column_transformer = ColumnTransformer(
+        transformers=[
+            ("numerical", numerical_pipeline, numerical_columns),
+            ("categorical", categorical_pipeline, categorical_columns),
+        ],
+        remainder="drop",
+        verbose_feature_names_out=False,
+    )
+
+    return Pipeline(
+        steps=[
+            (
+                "feature_engineering",
+                FunctionTransformer(add_engineered_features, validate=False),
+            ),
+            ("preprocessor", column_transformer),
+        ]
+    )
+
+
 def _find_impossible_values(data: pd.DataFrame, target_column: str) -> dict[str, int]:
     """Check dataset constraints whose violations are unambiguously invalid."""
     checks: dict[str, pd.Series] = {
@@ -152,3 +202,10 @@ def _count_iqr_outliers(numeric_data: pd.DataFrame) -> dict[str, int]:
         if count:
             outlier_counts[column] = int(count)
     return outlier_counts
+
+
+def _require_feature_columns(features: pd.DataFrame) -> None:
+    if features.empty:
+        raise ValueError("Cannot build a preprocessing pipeline from an empty feature set.")
+    if TARGET_COLUMN in features.columns:
+        raise ValueError("Features must not include the target column 'SalePrice'.")
