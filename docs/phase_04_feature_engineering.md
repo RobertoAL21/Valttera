@@ -15,4 +15,4 @@ The features in this phase are deterministic, interpretable, and computable from
 | `HasRemodel` | Remodel year is after construction year | Separates renovated homes from never-remodeled homes. |
 | `HasGarage` / `HasBasement` | Positive garage/basement area | Explicit absence indicators can complement area values. |
 
-These features are retained alongside their component fields. Model comparison—not intuition alone—will determine whether they improve generalization.
+The processed dataset retains the component fields for traceability and EDA. The modelling pipeline uses the aggregate feature in place of components that would create an exact duplicate mathematical relationship (for example, `TotalSF` replaces its three floor-area inputs). This prevents an unstable design matrix for the required `LinearRegression` while retaining the underlying information.

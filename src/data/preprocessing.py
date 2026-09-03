@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from collections.abc import Sequence
 
 import pandas as pd
 from sklearn.compose import ColumnTransformer
@@ -21,6 +22,26 @@ from src.features.engineering import add_engineered_features
 TARGET_COLUMN = "SalePrice"
 IDENTIFIER_COLUMN = "Id"
 HIGH_CARDINALITY_THRESHOLD = 50
+
+# These raw components are represented by interpretable engineered aggregates.
+# They remain in the processed dataset, but are excluded from the model matrix
+# to avoid exact linear dependencies such as TotalSF = basement + floor areas.
+REDUNDANT_AFTER_ENGINEERING = {
+    "TotalBsmtSF",
+    "1stFlrSF",
+    "2ndFlrSF",
+    "YearBuilt",
+    "YearRemodAdd",
+    "FullBath",
+    "HalfBath",
+    "BsmtFullBath",
+    "BsmtHalfBath",
+    "WoodDeckSF",
+    "OpenPorchSF",
+    "EnclosedPorch",
+    "3SsnPorch",
+    "ScreenPorch",
+}
 
 
 @dataclass(frozen=True)
@@ -129,7 +150,10 @@ def save_processed_data(data: pd.DataFrame, path: str | Path) -> Path:
     return destination
 
 
-def build_preprocessing_pipeline(features: pd.DataFrame) -> Pipeline:
+def build_preprocessing_pipeline(
+    features: pd.DataFrame,
+    selected_feature_columns: Sequence[str] | None = None,
+) -> Pipeline:
     """Create an unfitted pipeline for raw Ames property features.
 
     ``features`` supplies only the input schema. Fitted statistics, including
@@ -138,7 +162,17 @@ def build_preprocessing_pipeline(features: pd.DataFrame) -> Pipeline:
     """
     _require_feature_columns(features)
     feature_sample = add_engineered_features(features.iloc[:0].copy())
-    numerical_columns = feature_sample.select_dtypes(include="number").columns.tolist()
+    if selected_feature_columns is not None:
+        missing_columns = sorted(set(selected_feature_columns).difference(feature_sample.columns))
+        if missing_columns:
+            missing_display = ", ".join(missing_columns)
+            raise ValueError(f"Unknown selected feature columns: {missing_display}.")
+        feature_sample = feature_sample.loc[:, list(selected_feature_columns)]
+    numerical_columns = [
+        column
+        for column in feature_sample.select_dtypes(include="number").columns
+        if column not in REDUNDANT_AFTER_ENGINEERING
+    ]
     categorical_columns = feature_sample.select_dtypes(exclude="number").columns.tolist()
 
     numerical_pipeline = Pipeline(
@@ -150,7 +184,14 @@ def build_preprocessing_pipeline(features: pd.DataFrame) -> Pipeline:
     categorical_pipeline = Pipeline(
         steps=[
             ("imputer", SimpleImputer(strategy="constant", fill_value="Missing")),
-            ("encoder", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+            (
+                "encoder",
+                OneHotEncoder(
+                    drop="first",
+                    handle_unknown="ignore",
+                    sparse_output=False,
+                ),
+            ),
         ]
     )
     column_transformer = ColumnTransformer(

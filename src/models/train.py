@@ -4,11 +4,42 @@ from __future__ import annotations
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.dummy import DummyRegressor
+from sklearn.linear_model import LinearRegression
+from sklearn.base import RegressorMixin
+from sklearn.pipeline import Pipeline
+
+from src.data.preprocessing import build_preprocessing_pipeline
 
 
 DEFAULT_RANDOM_STATE = 42
 DEFAULT_TEST_SIZE = 0.20
 TARGET_COLUMN = "SalePrice"
+
+# A compact, domain-informed set for the untuned linear benchmark. It avoids
+# unstable coefficient estimates caused by a very wide, sparse feature matrix.
+BASELINE_FEATURE_COLUMNS = (
+    "OverallQual",
+    "GrLivArea",
+    "GarageCars",
+    "GarageArea",
+    "LotArea",
+    "TotalSF",
+    "TotalBathrooms",
+    "HouseAge",
+    "YearsSinceRemodel",
+    "TotalOutdoorSpace",
+    "OverallQualGrLivArea",
+    "Neighborhood",
+    "MSZoning",
+    "BldgType",
+    "HouseStyle",
+    "KitchenQual",
+    "ExterQual",
+    "Foundation",
+    "GarageType",
+    "BsmtQual",
+)
 
 
 def split_features_and_target(
@@ -46,3 +77,39 @@ def create_train_test_split(
         test_size=test_size,
         random_state=random_state,
     )
+
+
+def build_regression_pipeline(
+    features: pd.DataFrame,
+    estimator: RegressorMixin,
+    selected_feature_columns: tuple[str, ...] | None = None,
+) -> Pipeline:
+    """Combine feature processing and a regressor into one fitted artifact."""
+    return Pipeline(
+        steps=[
+            (
+                "preprocessing",
+                build_preprocessing_pipeline(features, selected_feature_columns),
+            ),
+            ("model", estimator),
+        ]
+    )
+
+
+def train_baseline_and_linear_models(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+) -> dict[str, Pipeline]:
+    """Fit the untuned baseline and linear-regression candidates on training data."""
+    candidates: dict[str, RegressorMixin] = {
+        "DummyRegressor (mean)": DummyRegressor(strategy="mean"),
+        "LinearRegression": LinearRegression(),
+    }
+    return {
+        name: build_regression_pipeline(
+            X_train,
+            estimator,
+            selected_feature_columns=BASELINE_FEATURE_COLUMNS,
+        ).fit(X_train, y_train)
+        for name, estimator in candidates.items()
+    }
