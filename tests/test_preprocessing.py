@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import pytest
 
@@ -49,6 +51,6 @@ def test_validate_housing_data_reports_quality_issues() -> None:
     }
 
 
-def test_save_processed_data_rejects_raw_destination(tmp_path: object) -> None:
+def test_save_processed_data_rejects_raw_destination(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="must not be written"):
         save_processed_data(pd.DataFrame({"SalePrice": [1]}), tmp_path / "raw" / "data.csv")
