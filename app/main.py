@@ -54,7 +54,7 @@ async def request_validation_exception_handler(
         for issue in error.errors()
     ]
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={"detail": "Request validation failed.", "errors": errors},
     )
 
@@ -107,7 +107,7 @@ def predict(property_features: PropertyFeatures, request: Request) -> Prediction
         )
     except (ValueError, TypeError) as error:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="The property data could not be used for prediction.",
         ) from error
 
