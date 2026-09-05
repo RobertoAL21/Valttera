@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import LinearRegression
@@ -140,3 +141,37 @@ def train_model_comparison_candidates(
         ).fit(X_train, y_train)
         for name, (estimator, selected_columns) in candidates.items()
     }
+
+
+def tune_gradient_boosting_model(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+) -> RandomizedSearchCV:
+    """Tune a bounded Gradient Boosting search with training-only CV.
+
+    The search prioritizes negative RMSE because large house-price errors are
+    especially costly. Its returned ``best_estimator_`` remains a complete
+    pipeline, including feature engineering and preprocessing.
+    """
+    pipeline = build_regression_pipeline(
+        X_train,
+        GradientBoostingRegressor(random_state=DEFAULT_RANDOM_STATE),
+    )
+    parameter_distributions = {
+        "model__n_estimators": [100, 150, 200, 250, 300],
+        "model__learning_rate": [0.03, 0.05, 0.08, 0.1],
+        "model__max_depth": [2, 3, 4],
+        "model__min_samples_leaf": [1, 2, 4],
+        "model__subsample": [0.8, 1.0],
+    }
+    search = RandomizedSearchCV(
+        estimator=pipeline,
+        param_distributions=parameter_distributions,
+        n_iter=20,
+        scoring="neg_root_mean_squared_error",
+        cv=5,
+        random_state=DEFAULT_RANDOM_STATE,
+        n_jobs=-1,
+        refit=True,
+    )
+    return search.fit(X_train, y_train)
