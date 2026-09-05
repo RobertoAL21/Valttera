@@ -73,6 +73,14 @@ def load_processed_data(path: str | Path) -> pd.DataFrame:
     return pd.read_csv(path, dtype={"MSSubClass": "string"})
 
 
+def normalize_model_input(features: pd.DataFrame) -> pd.DataFrame:
+    """Apply schema normalizations needed by both training and inference."""
+    normalized = features.copy()
+    if "MSSubClass" in normalized.columns:
+        normalized["MSSubClass"] = normalized["MSSubClass"].astype("string")
+    return normalized
+
+
 def validate_housing_data(
     data: pd.DataFrame,
     target_column: str = TARGET_COLUMN,
@@ -205,6 +213,7 @@ def build_preprocessing_pipeline(
 
     return Pipeline(
         steps=[
+            ("input_normalization", FunctionTransformer(normalize_model_input, validate=False)),
             (
                 "feature_engineering",
                 FunctionTransformer(add_engineered_features, validate=False),

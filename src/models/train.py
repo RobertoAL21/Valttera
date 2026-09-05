@@ -8,7 +8,7 @@ from sklearn.model_selection import RandomizedSearchCV
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import LinearRegression
-from sklearn.base import RegressorMixin
+from sklearn.base import RegressorMixin, clone
 from sklearn.pipeline import Pipeline
 
 from src.data.preprocessing import build_preprocessing_pipeline
@@ -175,3 +175,12 @@ def tune_gradient_boosting_model(
         refit=True,
     )
     return search.fit(X_train, y_train)
+
+
+def refit_pipeline_on_all_data(
+    fitted_pipeline: Pipeline,
+    X: pd.DataFrame,
+    y: pd.Series,
+) -> Pipeline:
+    """Refit a selected pipeline on every labeled row for deployment."""
+    return clone(fitted_pipeline).fit(X, y)
