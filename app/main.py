@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 import logging
-from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -12,10 +11,10 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.schemas import ApplicationInfo, HealthResponse, PredictionResponse, PropertyFeatures
+from src.config import MODEL_PATH
 from src.models.predict import load_pipeline, predict_single_price
 
 
-MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "house_price_pipeline.joblib"
 logger = logging.getLogger(__name__)
 
 

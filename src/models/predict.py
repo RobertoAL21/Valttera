@@ -10,8 +10,10 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from src.config import MODEL_PATH
 
-def save_pipeline(pipeline: Any, path: str | Path) -> Path:
+
+def save_pipeline(pipeline: Any, path: str | Path = MODEL_PATH) -> Path:
     """Persist a complete fitted preprocessing-and-model pipeline with Joblib."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -19,7 +21,7 @@ def save_pipeline(pipeline: Any, path: str | Path) -> Path:
     return destination
 
 
-def load_pipeline(path: str | Path) -> Any:
+def load_pipeline(path: str | Path = MODEL_PATH) -> Any:
     """Load a previously serialized fitted pipeline."""
     source = Path(path)
     if not source.is_file():

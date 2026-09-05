@@ -11,12 +11,12 @@ from sklearn.linear_model import LinearRegression
 from sklearn.base import RegressorMixin, clone
 from sklearn.pipeline import Pipeline
 
+from src.config import RANDOM_STATE, TARGET_COLUMN, TEST_SIZE
 from src.data.preprocessing import build_preprocessing_pipeline
 
 
-DEFAULT_RANDOM_STATE = 42
-DEFAULT_TEST_SIZE = 0.20
-TARGET_COLUMN = "SalePrice"
+DEFAULT_RANDOM_STATE = RANDOM_STATE
+DEFAULT_TEST_SIZE = TEST_SIZE
 
 # A compact, domain-informed set for the untuned linear benchmark. It avoids
 # unstable coefficient estimates caused by a very wide, sparse feature matrix.
@@ -125,11 +125,11 @@ def train_model_comparison_candidates(
     candidates: dict[str, tuple[RegressorMixin, tuple[str, ...] | None]] = {
         "LinearRegression": (LinearRegression(), BASELINE_FEATURE_COLUMNS),
         "RandomForestRegressor": (
-            RandomForestRegressor(random_state=DEFAULT_RANDOM_STATE, n_jobs=-1),
+            RandomForestRegressor(random_state=RANDOM_STATE, n_jobs=-1),
             None,
         ),
         "GradientBoostingRegressor": (
-            GradientBoostingRegressor(random_state=DEFAULT_RANDOM_STATE),
+            GradientBoostingRegressor(random_state=RANDOM_STATE),
             None,
         ),
     }
@@ -155,7 +155,7 @@ def tune_gradient_boosting_model(
     """
     pipeline = build_regression_pipeline(
         X_train,
-        GradientBoostingRegressor(random_state=DEFAULT_RANDOM_STATE),
+        GradientBoostingRegressor(random_state=RANDOM_STATE),
     )
     parameter_distributions = {
         "model__n_estimators": [100, 150, 200, 250, 300],
@@ -170,7 +170,7 @@ def tune_gradient_boosting_model(
         n_iter=20,
         scoring="neg_root_mean_squared_error",
         cv=5,
-        random_state=DEFAULT_RANDOM_STATE,
+        random_state=RANDOM_STATE,
         n_jobs=-1,
         refit=True,
     )

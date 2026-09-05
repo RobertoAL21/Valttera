@@ -17,11 +17,10 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder, StandardScaler
 
+from src.config import IDENTIFIER_COLUMN, TARGET_COLUMN
 from src.features.engineering import add_engineered_features
 
 
-TARGET_COLUMN = "SalePrice"
-IDENTIFIER_COLUMN = "Id"
 HIGH_CARDINALITY_THRESHOLD = 50
 
 # These raw components are represented by interpretable engineered aggregates.
