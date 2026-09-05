@@ -20,4 +20,4 @@ FastAPI's lifespan hook loads `models/house_price_pipeline.joblib` once when eac
 uvicorn app.main:app --reload
 ```
 
-Then visit `http://127.0.0.1:8000/docs`. Error handling will be expanded in Phase 13.
+Then visit `http://127.0.0.1:8000/docs`.

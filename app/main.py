@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.schemas import ApplicationInfo, HealthResponse, PredictionResponse, PropertyFeatures
 from src.models.predict import load_pipeline, predict_single_price
 
 
 MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "house_price_pipeline.joblib"
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -21,7 +25,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         app.state.model = load_pipeline(MODEL_PATH)
         app.state.model_load_error = None
-    except (FileNotFoundError, OSError, ValueError) as error:
+    except Exception as error:
+        logger.exception("Unable to load the prediction model during application startup.")
         app.state.model = None
         app.state.model_load_error = str(error)
     yield
@@ -33,6 +38,35 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(
+    _: Request,
+    error: RequestValidationError,
+) -> JSONResponse:
+    """Return concise, field-level validation errors without echoing input values."""
+    errors = [
+        {
+            "field": ".".join(str(location) for location in issue["loc"]),
+            "message": issue["msg"],
+        }
+        for issue in error.errors()
+    ]
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": "Request validation failed.", "errors": errors},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_: Request, error: Exception) -> JSONResponse:
+    """Prevent unexpected internal details from being exposed to API clients."""
+    logger.exception("Unexpected prediction service error.", exc_info=error)
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": "An unexpected server error occurred."},
+    )
 
 
 @app.get("/", response_model=ApplicationInfo, tags=["Service"])
