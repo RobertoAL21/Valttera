@@ -1,0 +1,16 @@
+.git
+.venv
+.venv.broken
+__pycache__
+*.py[cod]
+.pytest_cache
+.ipynb_checkpoints
+data
+docs
+notebooks
+tests
+models/*.pkl
+!models/house_price_pipeline.joblib
+.env
+.env.*
+.DS_Store
