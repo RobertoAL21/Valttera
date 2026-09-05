@@ -11,6 +11,7 @@ from pathlib import Path
 from collections.abc import Sequence
 
 import pandas as pd
+import numpy as np
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
@@ -75,7 +76,7 @@ def load_processed_data(path: str | Path) -> pd.DataFrame:
 
 def normalize_model_input(features: pd.DataFrame) -> pd.DataFrame:
     """Apply schema normalizations needed by both training and inference."""
-    normalized = features.copy()
+    normalized = features.copy().where(features.notna(), np.nan)
     if "MSSubClass" in normalized.columns:
         normalized["MSSubClass"] = normalized["MSSubClass"].astype("string")
     return normalized
