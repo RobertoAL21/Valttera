@@ -50,3 +50,33 @@ def evaluate_models(
         results.append({"Model": name, **metrics.as_dict()})
 
     return pd.DataFrame(results).sort_values("rmse").reset_index(drop=True)
+
+
+def build_residual_frame(
+    model: Any,
+    X: pd.DataFrame,
+    y_true: pd.Series,
+) -> pd.DataFrame:
+    """Return actual values, predictions, and signed residuals for diagnostics."""
+    with np.errstate(divide="ignore", over="ignore", invalid="ignore"):
+        predictions = model.predict(X)
+    if not np.isfinite(predictions).all():
+        raise ValueError("Model produced non-finite predictions.")
+
+    actual = pd.Series(y_true, index=X.index, name="actual_price")
+    prediction_series = pd.Series(predictions, index=X.index, name="predicted_price")
+    return pd.concat([actual, prediction_series], axis=1).assign(
+        residual=lambda frame: frame["actual_price"] - frame["predicted_price"],
+        absolute_error=lambda frame: frame["residual"].abs(),
+    )
+
+
+def extract_feature_importances(model: Any) -> pd.Series:
+    """Extract sorted feature importances from a fitted tree-based pipeline."""
+    estimator = model.named_steps["model"]
+    if not hasattr(estimator, "feature_importances_"):
+        raise ValueError("The fitted estimator does not provide feature_importances_.")
+
+    preprocessor = model.named_steps["preprocessing"].named_steps["preprocessor"]
+    feature_names = preprocessor.get_feature_names_out()
+    return pd.Series(estimator.feature_importances_, index=feature_names).sort_values(ascending=False)
