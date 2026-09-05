@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.dummy import DummyRegressor
+from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.base import RegressorMixin
 from sklearn.pipeline import Pipeline
@@ -112,4 +113,30 @@ def train_baseline_and_linear_models(
             selected_feature_columns=BASELINE_FEATURE_COLUMNS,
         ).fit(X_train, y_train)
         for name, estimator in candidates.items()
+    }
+
+
+def train_model_comparison_candidates(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+) -> dict[str, Pipeline]:
+    """Fit untuned linear and tree-based candidates on one training partition."""
+    candidates: dict[str, tuple[RegressorMixin, tuple[str, ...] | None]] = {
+        "LinearRegression": (LinearRegression(), BASELINE_FEATURE_COLUMNS),
+        "RandomForestRegressor": (
+            RandomForestRegressor(random_state=DEFAULT_RANDOM_STATE, n_jobs=-1),
+            None,
+        ),
+        "GradientBoostingRegressor": (
+            GradientBoostingRegressor(random_state=DEFAULT_RANDOM_STATE),
+            None,
+        ),
+    }
+    return {
+        name: build_regression_pipeline(
+            X_train,
+            estimator,
+            selected_feature_columns=selected_columns,
+        ).fit(X_train, y_train)
+        for name, (estimator, selected_columns) in candidates.items()
     }
